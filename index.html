@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Подача Табеля</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #fff);
+            --text-color: var(--tg-theme-text-color, #222);
+            --hint-color: var(--tg-theme-hint-color, #999);
+            --button-color: var(--tg-theme-button-color, #3390ec);
+            --button-text-color: var(--tg-theme-button-text-color, #fff);
+            --secondary-bg-color: var(--tg-theme-secondary-bg-color, #f4f4f5);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+
+        h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        /* Select & Inputs */
+        select,
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid var(--hint-color);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            margin-bottom: 16px;
+        }
+
+        /* Workers List */
+        .workers-list {
+            margin-bottom: 16px;
+        }
+
+        .worker-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background-color: var(--secondary-bg-color);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .worker-item input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            margin-right: 12px;
+            accent-color: var(--button-color);
+            cursor: pointer;
+        }
+
+        .worker-info {
+            flex-grow: 1;
+        }
+
+        .worker-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .worker-role {
+            font-size: 13px;
+            color: var(--hint-color);
+        }
+
+        .add-worker-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .add-worker-form button {
+            background-color: var(--secondary-bg-color);
+            color: var(--button-color);
+            border: none;
+            border-radius: 12px;
+            padding: 0 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Range Slider for Hours */
+        .range-container {
+            margin-bottom: 24px;
+            padding: 16px;
+            background-color: var(--secondary-bg-color);
+            border-radius: 12px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--button-color);
+        }
+
+        .hours-display {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--button-color);
+        }
+
+        .remove-btn {
+            color: #ff3b30;
+            margin-left: 10px;
+            font-size: 20px;
+            padding: 4px 8px;
+            border: none;
+            background: none;
+        }
+
+        /* Loading Overlay */
+        #loader {
+            text-align: center;
+            padding: 20px;
+            color: var(--hint-color);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loader">Загрузка...</div>
+
+    <div id="app" style="display: none;">
+
+        <!-- Date Selection -->
+        <label>Дата работ</label>
+        <select id="dateSelect">
+            <option value="today">Сегодня</option>
+            <option value="yesterday">Вчера</option>
+        </select>
+
+        <!-- Object Selection -->
+        <label>Объект</label>
+        <select id="objectSelect">
+            <option value="" disabled selected>Выберите объект</option>
+        </select>
+
+        <!-- Workers Section -->
+        <h3>Кто работал?</h3>
+        <div id="workersList" class="workers-list">
+            <!-- Items injected by JS -->
+        </div>
+
+        <div class="add-worker-form">
+            <input type="text" id="newWorkerName" placeholder="Имя нового сотрудника" style="margin-bottom: 0;">
+            <button onclick="addWorker()">+</button>
+        </div>
+
+        <!-- Hours Section -->
+        <h3>Кол-во часов: <span id="hoursValue">8</span></h3>
+        <div class="range-container">
+            <input type="range" id="hoursRange" min="1" max="15" value="8" step="0.5" oninput="updateHours(this.value)">
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Na ves ekran
+
+        // State
+        let workers = JSON.parse(localStorage.getItem('my_workers')) || [];
+        // Default workers if empty
+        if (workers.length === 0) {
+            workers = [
+                { id: 'me', name: 'Я (Бригадир)', selected: true },
+            ];
+        }
+
+        function init() {
+            // Theme setup
+            document.documentElement.style.setProperty('--tg-theme-bg-color', tg.backgroundColor || '#fff');
+
+            // 1. Parse URL Params for Objects
+            const urlParams = new URLSearchParams(window.location.search);
+            const objectsRaw = urlParams.get('objects'); // Expecting format: "Obj1,Obj2"
+
+            const objectSelect = document.getElementById('objectSelect');
+            if (objectsRaw) {
+                try {
+                    // Support both JSON array and comma-separated
+                    let objectsList;
+                    if (objectsRaw.startsWith('[')) {
+                        objectsList = JSON.parse(objectsRaw);
+                    } else {
+                        objectsList = objectsRaw.split(',').map(s => s.trim());
+                    }
+
+                    objectsList.forEach(objName => {
+                        const opt = document.createElement('option');
+                        opt.value = objName;
+                        opt.innerText = objName;
+                        objectSelect.appendChild(opt);
+                    });
+
+                    // Select first if available
+                    if (objectsList.length > 0) objectSelect.selectedIndex = 0;
+                } catch (e) {
+                    console.error("Error parsing objects", e);
+                    const opt = document.createElement('option');
+                    opt.innerText = "Ошибка списка объектов";
+                    objectSelect.appendChild(opt);
+                }
+            } else {
+                const opt = document.createElement('option');
+                opt.innerText = "Нет назначенных объектов";
+                objectSelect.appendChild(opt);
+            }
+
+            renderWorkers();
+
+            // Show App
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+
+            // Setup Main Button
+            tg.MainButton.text = "ОТПРАВИТЬ ОТЧЕТ";
+            tg.MainButton.onClick(submitForm);
+            updateMainButton();
+        }
+
+        function renderWorkers() {
+            const container = document.getElementById('workersList');
+            container.innerHTML = '';
+
+            workers.forEach((worker, index) => {
+                const div = document.createElement('div');
+                div.className = 'worker-item';
+                div.onclick = (e) => {
+                    if (e.target.type !== 'checkbox' && !e.target.classList.contains('remove-btn')) {
+                        toggleWorker(index);
+                    }
+                };
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = worker.selected;
+                checkbox.onchange = () => toggleWorker(index);
+
+                const info = document.createElement('div');
+                info.className = 'worker-info';
+                info.innerHTML = `<div class="worker-name">${worker.name}</div>`;
+
+                div.appendChild(checkbox);
+                div.appendChild(info);
+
+                // Delete button for non-me
+                if (worker.id !== 'me') {
+                    const delBtn = document.createElement('span');
+                    delBtn.className = 'remove-btn';
+                    delBtn.innerHTML = '&times;';
+                    delBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        removeWorker(index);
+                    };
+                    div.appendChild(delBtn);
+                }
+
+                container.appendChild(div);
+            });
+            updateMainButton();
+        }
+
+        function toggleWorker(index) {
+            workers[index].selected = !workers[index].selected;
+            saveWorkers();
+            renderWorkers();
+        }
+
+        function addWorker() {
+            const input = document.getElementById('newWorkerName');
+            const name = input.value.trim();
+            if (!name) return;
+
+            workers.push({
+                id: Date.now().toString(),
+                name: name,
+                selected: true
+            });
+            input.value = '';
+            saveWorkers();
+            renderWorkers();
+        }
+
+        function removeWorker(index) {
+            if (confirm('Удалить этого сотрудника из списка?')) {
+                workers.splice(index, 1);
+                saveWorkers();
+                renderWorkers();
+            }
+        }
+
+        function saveWorkers() {
+            // Save to localStorage so they persist
+            localStorage.setItem('my_workers', JSON.stringify(workers));
+            updateMainButton();
+        }
+
+        function updateHours(val) {
+            document.getElementById('hoursValue').innerText = val;
+        }
+
+        function updateMainButton() {
+            const selectedCount = workers.filter(w => w.selected).length;
+            const objectSelected = document.getElementById('objectSelect').value;
+
+            if (selectedCount > 0 && objectSelected) {
+                tg.MainButton.show();
+                tg.MainButton.text = `ОТПРАВИТЬ (${selectedCount} чел / ${document.getElementById('hoursRange').value}ч)`;
+            } else {
+                tg.MainButton.hide();
+            }
+        }
+
+        // Listen for hour changes to update button text too
+        document.getElementById('hoursRange').addEventListener('input', updateMainButton);
+        document.getElementById('objectSelect').addEventListener('change', updateMainButton);
+
+        function submitForm() {
+            const selectedWorkers = workers.filter(w => w.selected).map(w => w.name);
+            const objectName = document.getElementById('objectSelect').value;
+            const hours = document.getElementById('hoursRange').value;
+            const dateMode = document.getElementById('dateSelect').value; // today/yesterday
+
+            // Determine actual date string YYYY-MM-DD
+            const date = new Date();
+            if (dateMode === 'yesterday') {
+                date.setDate(date.getDate() - 1);
+            }
+            const dateStr = date.toISOString().split('T')[0];
+
+            const payload = {
+                type: 'rtb_submission',
+                date: dateStr,
+                object: objectName,
+                workers: selectedWorkers,
+                hours: parseFloat(hours)
+            };
+
+            tg.sendData(JSON.stringify(payload));
+        }
+
+        // Run
+        init();
+    </script>
+</body>
+
+</html>
