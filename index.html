@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Подача Табеля</title>
+    <title>Подача Табеля (Wizard V3.1)</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -26,20 +26,25 @@
         }
 
         h3 {
-            margin-top: 0;
-            margin-bottom: 12px;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            font-size: 16px;
+            text-transform: uppercase;
+            color: var(--hint-color);
         }
 
         label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
+            margin-bottom: 4px;
+            font-size: 14px;
+            color: var(--hint-color);
         }
 
         /* Select & Inputs */
         select,
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        input[type="date"] {
             width: 100%;
             padding: 12px;
             border-radius: 12px;
@@ -49,7 +54,17 @@
             font-size: 16px;
             box-sizing: border-box;
             outline: none;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* Steps UI */
+        .step {
+            display: none;
+            /* Hidden by default */
+        }
+
+        .step.active {
+            display: block;
         }
 
         /* Workers List */
@@ -60,11 +75,10 @@
         .worker-item {
             display: flex;
             align-items: center;
-            padding: 12px;
+            padding: 10px;
             background-color: var(--secondary-bg-color);
             border-radius: 12px;
             margin-bottom: 8px;
-            cursor: pointer;
             transition: opacity 0.2s;
         }
 
@@ -82,12 +96,15 @@
 
         .worker-name {
             font-weight: 600;
-            font-size: 16px;
+            font-size: 15px;
         }
 
-        .worker-role {
-            font-size: 13px;
-            color: var(--hint-color);
+        .hours-input {
+            width: 60px !important;
+            padding: 8px !important;
+            margin-bottom: 0 !important;
+            text-align: center;
+            font-weight: bold;
         }
 
         .add-worker-form {
@@ -97,34 +114,14 @@
         }
 
         .add-worker-form button {
-            background-color: var(--secondary-bg-color);
-            color: var(--button-color);
+            background-color: var(--button-color);
+            color: var(--button-text-color);
             border: none;
             border-radius: 12px;
             padding: 0 16px;
             font-weight: 600;
             cursor: pointer;
-        }
-
-        /* Range Slider for Hours */
-        .range-container {
-            margin-bottom: 24px;
-            padding: 16px;
-            background-color: var(--secondary-bg-color);
-            border-radius: 12px;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            accent-color: var(--button-color);
-        }
-
-        .hours-display {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: var(--button-color);
+            font-size: 20px;
         }
 
         .remove-btn {
@@ -134,13 +131,52 @@
             padding: 4px 8px;
             border: none;
             background: none;
+            cursor: pointer;
         }
 
-        /* Loading Overlay */
-        #loader {
+        /* Navigation Buttons (In-App) */
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
             text-align: center;
-            padding: 20px;
+        }
+
+        .btn-primary {
+            background-color: var(--button-color);
+            color: var(--button-text-color);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-bg-color);
+            color: var(--text-color);
+        }
+
+        .hint {
+            font-size: 12px;
             color: var(--hint-color);
+            margin-bottom: 8px;
+        }
+
+        .date-display {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--button-color);
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: var(--secondary-bg-color);
+            border-radius: 12px;
         }
     </style>
 </head>
@@ -149,102 +185,121 @@
 
     <div id="loader">Загрузка...</div>
 
-    <div id="app" style="display: none;">
+    <!-- STEP 1: SETUP -->
+    <div id="step-setup" class="step">
+        <h3>1. Настройка</h3>
 
-        <!-- Date Selection -->
-        <label>Дата работ</label>
-        <select id="dateSelect">
-            <option value="today">Сегодня</option>
-            <option value="yesterday">Вчера</option>
-        </select>
-
-        <!-- Object Selection -->
         <label>Объект</label>
         <select id="objectSelect">
             <option value="" disabled selected>Выберите объект</option>
         </select>
 
-        <!-- Workers Section -->
-        <h3>Кто работал?</h3>
+        <label>Дата начала отчета</label>
+        <input type="date" id="startDate">
+        <div class="hint">Укажите первый день (например, понедельник). Дальше мы будем листать дни вперед.</div>
+
+        <button class="btn btn-primary" style="width: 100%" onclick="goToDailyEntry()">Начать заполнение</button>
+    </div>
+
+    <!-- STEP 2: DAILY ENTRY -->
+    <div id="step-daily" class="step">
+        <h3 id="currentDateHeader">Дата...</h3>
+        <div id="currentDateDisplay" class="date-display">01.01.2026</div>
+
         <div id="workersList" class="workers-list">
-            <!-- Items injected by JS -->
+            <!-- Workers here -->
         </div>
 
         <div class="add-worker-form">
-            <input type="text" id="newWorkerName" placeholder="Имя нового сотрудника" style="margin-bottom: 0;">
+            <input type="text" id="newWorkerName" placeholder="Новый работник..." style="margin-bottom: 0;">
             <button onclick="addWorker()">+</button>
         </div>
 
-        <!-- Hours Section -->
-        <h3>Кол-во часов: <span id="hoursValue">8</span></h3>
-        <div class="range-container">
-            <input type="range" id="hoursRange" min="1" max="15" value="8" step="0.5" oninput="updateHours(this.value)">
+        <div class="nav-buttons">
+            <button class="btn btn-primary" onclick="nextDay()">Следующий день &gt;</button>
         </div>
+        <div class="nav-buttons">
+            <button class="btn btn-secondary" style="background-color: #34c759; color: white;"
+                onclick="finishAndSend()">Готово! Отправить &gt;</button>
+        </div>
+
+        <div style="height: 50px;"></div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Na ves ekran
+        tg.expand();
 
         // State
-        let workers = JSON.parse(localStorage.getItem('my_workers')) || [];
-        // Default workers if empty
-        if (workers.length === 0) {
-            workers = [
-                { id: 'me', name: 'Я (Бригадир)', selected: true },
-            ];
-        }
+        let workers = [];     // Current list of workers on screen
+        let savedEntries = []; // Array of {date, workers: []} to submit
+        let cursorDate = new Date(); // Current date being edited
 
         function init() {
             // Theme setup
             document.documentElement.style.setProperty('--tg-theme-bg-color', tg.backgroundColor || '#fff');
 
-            // 1. Parse URL Params for Objects
-            const urlParams = new URLSearchParams(window.location.search);
-            const objectsRaw = urlParams.get('objects'); // Expecting format: "Obj1,Obj2"
-
-            const objectSelect = document.getElementById('objectSelect');
-            if (objectsRaw) {
-                try {
-                    // Support both JSON array and comma-separated
-                    let objectsList;
-                    if (objectsRaw.startsWith('[')) {
-                        objectsList = JSON.parse(objectsRaw);
-                    } else {
-                        objectsList = objectsRaw.split(',').map(s => s.trim());
-                    }
-
-                    objectsList.forEach(objName => {
-                        const opt = document.createElement('option');
-                        opt.value = objName;
-                        opt.innerText = objName;
-                        objectSelect.appendChild(opt);
-                    });
-
-                    // Select first if available
-                    if (objectsList.length > 0) objectSelect.selectedIndex = 0;
-                } catch (e) {
-                    console.error("Error parsing objects", e);
-                    const opt = document.createElement('option');
-                    opt.innerText = "Ошибка списка объектов";
-                    objectSelect.appendChild(opt);
-                }
-            } else {
-                const opt = document.createElement('option');
-                opt.innerText = "Нет назначенных объектов";
-                objectSelect.appendChild(opt);
+            // Load Workers (persistently)
+            workers = JSON.parse(localStorage.getItem('my_workers_v3')) || [];
+            if (workers.length === 0) {
+                // Initialize defaults
+                workers = [{ id: 'me', name: 'Я (Бригадир)', selected: true, hours: 8 }];
             }
 
-            renderWorkers();
+            // Setup Start Date (Default Today)
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('startDate').value = today;
 
-            // Show App
+            // Load Objects
+            const urlParams = new URLSearchParams(window.location.search);
+            const objectsRaw = urlParams.get('objects'); // Format: "Obj1,Obj2"
+            const objectSelect = document.getElementById('objectSelect');
+
+            if (objectsRaw) {
+                const list = objectsRaw.split(',').map(s => s.trim());
+                list.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o;
+                    opt.innerText = o;
+                    objectSelect.appendChild(opt);
+                });
+                if (list.length > 0) objectSelect.selectedIndex = 0;
+            } else {
+                objectSelect.innerHTML = '<option>Нет объектов</option>';
+            }
+
+            // Show Setup Step
             document.getElementById('loader').style.display = 'none';
-            document.getElementById('app').style.display = 'block';
+            document.getElementById('step-setup').classList.add('active');
 
-            // Setup Main Button
-            tg.MainButton.text = "ОТПРАВИТЬ ОТЧЕТ";
-            tg.MainButton.onClick(submitForm);
-            updateMainButton();
+            // Hide TG Main Button (we use custom buttons)
+            tg.MainButton.hide();
+        }
+
+        // --- NAVIGATION ---
+
+        function goToDailyEntry() {
+            const obj = document.getElementById('objectSelect').value;
+            const start = document.getElementById('startDate').value;
+
+            if (!obj) { alert("Выберите объект!"); return; }
+            if (!start) { alert("Выберите дату начала!"); return; }
+
+            cursorDate = new Date(start);
+            renderDailyView();
+
+            document.getElementById('step-setup').classList.remove('active');
+            document.getElementById('step-daily').classList.add('active');
+        }
+
+        function renderDailyView() {
+            // Format Date
+            const iso = cursorDate.toISOString().split('T')[0];
+            const display = cursorDate.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            document.getElementById('currentDateDisplay').innerText = display;
+
+            renderWorkers();
         }
 
         function renderWorkers() {
@@ -255,117 +310,137 @@
                 const div = document.createElement('div');
                 div.className = 'worker-item';
                 div.onclick = (e) => {
-                    if (e.target.type !== 'checkbox' && !e.target.classList.contains('remove-btn')) {
-                        toggleWorker(index);
+                    if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('remove-btn')) {
+                        toggleWorkerSelection(index);
                     }
                 };
 
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = worker.selected;
-                checkbox.onchange = () => toggleWorker(index);
+                // Checkbox
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = worker.selected;
+                cb.onchange = () => toggleWorkerSelection(index);
 
+                // Name
                 const info = document.createElement('div');
                 info.className = 'worker-info';
                 info.innerHTML = `<div class="worker-name">${worker.name}</div>`;
 
-                div.appendChild(checkbox);
-                div.appendChild(info);
+                // Hours
+                const inp = document.createElement('input');
+                inp.type = 'number';
+                inp.className = 'hours-input';
+                inp.value = worker.hours || 8;
+                inp.onchange = (e) => { workers[index].hours = parseFloat(e.target.value); saveWorkersParams(); };
+                inp.onclick = (e) => e.stopPropagation();
 
-                // Delete button for non-me
+                div.appendChild(cb);
+                div.appendChild(info);
+                div.appendChild(inp);
+
+                // Remove btn
                 if (worker.id !== 'me') {
-                    const delBtn = document.createElement('span');
-                    delBtn.className = 'remove-btn';
-                    delBtn.innerHTML = '&times;';
-                    delBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        removeWorker(index);
-                    };
-                    div.appendChild(delBtn);
+                    const del = document.createElement('span');
+                    del.className = 'remove-btn';
+                    del.innerHTML = '&times;';
+                    del.onclick = (e) => { e.stopPropagation(); removeWorker(index); };
+                    div.appendChild(del);
                 }
 
                 container.appendChild(div);
             });
-            updateMainButton();
         }
 
-        function toggleWorker(index) {
+        function toggleWorkerSelection(index) {
             workers[index].selected = !workers[index].selected;
-            saveWorkers();
+            saveWorkersParams();
             renderWorkers();
         }
 
         function addWorker() {
-            const input = document.getElementById('newWorkerName');
-            const name = input.value.trim();
+            const name = document.getElementById('newWorkerName').value.trim();
             if (!name) return;
-
-            workers.push({
-                id: Date.now().toString(),
-                name: name,
-                selected: true
-            });
-            input.value = '';
-            saveWorkers();
+            workers.push({ id: Date.now().toString(), name: name, selected: true, hours: 8 });
+            document.getElementById('newWorkerName').value = '';
+            saveWorkersParams();
             renderWorkers();
         }
 
         function removeWorker(index) {
-            if (confirm('Удалить этого сотрудника из списка?')) {
+            if (confirm("Удалить?")) {
                 workers.splice(index, 1);
-                saveWorkers();
+                saveWorkersParams();
                 renderWorkers();
             }
         }
 
-        function saveWorkers() {
-            // Save to localStorage so they persist
-            localStorage.setItem('my_workers', JSON.stringify(workers));
-            updateMainButton();
+        function saveWorkersParams() {
+            localStorage.setItem('my_workers_v3', JSON.stringify(workers));
         }
 
-        function updateHours(val) {
-            document.getElementById('hoursValue').innerText = val;
+        // --- SUBMISSION LOGIC ---
+
+        function nextDay() {
+            // 1. Save current day to buffer
+            pushCurrentDayToBuffer();
+
+            // 2. Increment Date
+            cursorDate.setDate(cursorDate.getDate() + 1);
+
+            // 3. Re-render
+            // Note: We deliberately KEEP the worker's hours/selection states as is, 
+            // because the user likely wants to submit the same team/hours for the next day, usually.
+            renderDailyView();
+
+            // Feedback
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
         }
 
-        function updateMainButton() {
-            const selectedCount = workers.filter(w => w.selected).length;
-            const objectSelected = document.getElementById('objectSelect').value;
+        function pushCurrentDayToBuffer() {
+            const selected = workers.filter(w => w.selected);
+            if (selected.length === 0) return; // Skip empty days automatically? Or warn? Let's skip.
 
-            if (selectedCount > 0 && objectSelected) {
-                tg.MainButton.show();
-                tg.MainButton.text = `ОТПРАВИТЬ (${selectedCount} чел / ${document.getElementById('hoursRange').value}ч)`;
-            } else {
-                tg.MainButton.hide();
+            const iso = cursorDate.toISOString().split('T')[0];
+
+            savedEntries.push({
+                date: iso,
+                workers: selected.map(w => ({
+                    name: w.name,
+                    hours: w.hours || 8
+                }))
+            });
+        }
+
+        function finishAndSend() {
+            // Push the FINAL day (current view) if not already pushed
+            // But usually "Next" pushes. "Finish" acts as "Submit EVERYTHING up to now including now".
+            pushCurrentDayToBuffer();
+
+            if (savedEntries.length === 0) {
+                alert("Нет данных для отправки! Выберите работников.");
+                return;
             }
-        }
 
-        // Listen for hour changes to update button text too
-        document.getElementById('hoursRange').addEventListener('input', updateMainButton);
-        document.getElementById('objectSelect').addEventListener('change', updateMainButton);
-
-        function submitForm() {
-            const selectedWorkers = workers.filter(w => w.selected).map(w => w.name);
             const objectName = document.getElementById('objectSelect').value;
-            const hours = document.getElementById('hoursRange').value;
-            const dateMode = document.getElementById('dateSelect').value; // today/yesterday
-
-            // Determine actual date string YYYY-MM-DD
-            const date = new Date();
-            if (dateMode === 'yesterday') {
-                date.setDate(date.getDate() - 1);
-            }
-            const dateStr = date.toISOString().split('T')[0];
 
             const payload = {
-                type: 'rtb_submission',
-                date: dateStr,
+                type: 'rtb_batch_submission',
                 object: objectName,
-                workers: selectedWorkers,
-                hours: parseFloat(hours)
+                entries: savedEntries
             };
 
-            tg.sendData(JSON.stringify(payload));
+            // Local Dev Mode check
+            if (!tg.initDataUnsafe || !tg.initDataUnsafe.query_id) {
+                console.log("LOCAL_SUBMISSION:", payload);
+                alert("🛠 ЛОКАЛЬНЫЙ РЕЖИМ\n\nДанные сформированы (см. консоль):\n" + JSON.stringify(payload, null, 2));
+                return;
+            }
+
+            try {
+                tg.sendData(JSON.stringify(payload));
+            } catch (e) {
+                alert("Ошибка отправки: " + e.message);
+            }
         }
 
         // Run
